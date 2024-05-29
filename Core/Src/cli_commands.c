@@ -16,6 +16,7 @@
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
+#include "spi_flash.h"
 
 #define PRINT_ABOUT_TASK_STAK_SIZE 128u
 #define PRINT_ABOUT_TASK_PRIORITY 2u
@@ -132,6 +133,30 @@ static uint8_t Get_Heap_Callback(uint8_t argc, const char *argv[],
 static uint8_t Start_Stop_Trace_Callback(uint8_t argc, const char *argv[],
                                          char *out_buffer, uint16_t out_maxn);
 #endif
+
+static uint8_t Flash_GetDevId_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
+
+static uint8_t Flash_GetUniqId_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
+static uint8_t Flash_GetSecData_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
+static uint8_t Flash_SetSecData_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
+
+static uint8_t Flash_GetStatusReg1_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
+static uint8_t Flash_GetStatusReg2_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
+static uint8_t Flash_GetConfigReg_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
 /************CLI Callback Prototypes Ends***********************************/
 
 /************CLI Commands Definitions starts***********************************/
@@ -222,6 +247,59 @@ CLI_Command_t xStartStopTrace =
         .CLI_Callback = Start_Stop_Trace_Callback,
 };
 #endif /* configINCLUDE_TRACE_RELATED_CLI_COMMANDS */
+
+
+CLI_Command_t xFlashGetDevId =
+{
+		.CLI_Command = "flash_getDevId",
+		.CLI_Command_Description = "get flash dev id",
+		.CLI_Callback = Flash_GetDevId_Callback,
+};
+
+CLI_Command_t xFlashGetUniqId =
+{
+		.CLI_Command = "flash_getUniqId",
+		.CLI_Command_Description = "get flash unique id",
+		.CLI_Callback = Flash_GetUniqId_Callback,
+};
+
+CLI_Command_t xFlashGetSecData =
+{
+		.CLI_Command = "flash_getSecData",
+		.CLI_Command_Description = "get flash Sec Data",
+		.CLI_Callback = Flash_GetSecData_Callback,
+};
+
+
+CLI_Command_t xFlashSetSecData =
+{
+		.CLI_Command = "flash_setSecData",
+		.CLI_Command_Description = "set flash Sec Data",
+		.CLI_Callback = Flash_SetSecData_Callback,
+};
+
+
+
+CLI_Command_t xFlashGetStatusReg1 =
+{
+		.CLI_Command = "flash_getStatusReg1",
+		.CLI_Command_Description = "get flash status reg1",
+		.CLI_Callback = Flash_GetStatusReg1_Callback,
+};
+
+CLI_Command_t xFlashGetStatusReg2 =
+{
+		.CLI_Command = "flash_getStatusReg2",
+		.CLI_Command_Description = "get flash status reg2",
+		.CLI_Callback = Flash_GetStatusReg2_Callback,
+};
+
+CLI_Command_t xFlashGetConfigReg =
+{
+		.CLI_Command = "flash_getConfigReg",
+		.CLI_Command_Description = "get flash config reg",
+		.CLI_Callback = Flash_GetConfigReg_Callback,
+};
 
 /************CLI Commands Definitions ends***********************************/
 
@@ -597,6 +675,104 @@ static uint8_t Start_Stop_Trace_Callback(uint8_t argc, const char *argv[],
 
 #endif /* configINCLUDE_TRACE_RELATED_CLI_COMMANDS */
 
+
+
+static uint8_t Flash_GetDevId_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_max)
+{
+	uint8_t man_id = 0x00;
+	uint16_t dev_id = 0x00;
+
+	spi_flash_disable_4b();
+
+	spi_flash_get_dev_id(&man_id, &dev_id);
+
+	sprintf(out_buffer, "spi flash manufacture id: %x, device id: %x.\r\n", man_id, dev_id);
+
+
+
+	return pdFALSE;
+}
+
+static uint8_t unique_id[8];
+
+static uint8_t Flash_GetUniqId_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_max)
+{
+	spi_flash_get_unique_id(unique_id);
+	sprintf(out_buffer, "spi flash unique id: %x %x %x %x %x %x %x %x.\r\n", unique_id[0], unique_id[1],
+																	unique_id[2], unique_id[3],
+																	unique_id[4], unique_id[5],
+																	unique_id[6], unique_id[7]);
+	return pdFALSE;
+}
+
+static uint8_t sec_data[1024];
+
+static uint8_t Flash_GetSecData_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_max)
+{
+	int32_t len = 0;
+	int32_t sec_reg = 0;
+	Parse_Integer(argv[1], &sec_reg);
+	Parse_Integer(argv[2], &len);
+	if(sec_reg > 2 || sec_reg < 0)
+	{
+		sec_reg = 0;
+	}
+
+	if(len > 1024 || len <= 0)
+	{
+		len = 1024;
+	}
+
+	spi_flash_read_security_reg(sec_reg, sec_data, len);
+
+	sprintf(out_buffer, "spi flash read sec reg %ld, data len: %ld,  data: \r\n", sec_reg, len);
+
+
+	return pdFALSE;
+}
+
+
+static uint8_t Flash_SetSecData_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_max)
+{
+
+	return pdFALSE;
+}
+
+
+static uint8_t Flash_GetStatusReg1_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn)
+{
+	uint8_t status_reg1 = 0x00;
+	spi_flash_read_status_reg1(&status_reg1);
+	sprintf(out_buffer, "spi flash status reg1: %x \r\n", status_reg1);
+
+	return pdFALSE;
+}
+
+
+static uint8_t Flash_GetStatusReg2_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn)
+{
+	uint8_t status_reg2 = 0x00;
+	spi_flash_read_status_reg2(&status_reg2);
+	sprintf(out_buffer, "spi flash status reg2: %x \r\n", status_reg2);
+	return pdFALSE;
+}
+
+
+static uint8_t Flash_GetConfigReg_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn)
+{
+	uint8_t config_reg = 0x00;
+	spi_flash_read_status_reg2(&config_reg);
+	sprintf(out_buffer, "spi flash config reg: %x \r\n", config_reg);
+	return pdFALSE;
+}
+
 /************CLI callback Implementation starts***********************************/
 
 /*
@@ -632,6 +808,16 @@ void CLI_Add_All_Commands()
         CLI_Add_Command(&xStartStopTrace);
     }
 #endif
+
+    {
+    	CLI_Add_Command(&xFlashGetDevId);
+    	CLI_Add_Command(&xFlashGetUniqId);
+    	CLI_Add_Command(&xFlashGetStatusReg1);
+    	CLI_Add_Command(&xFlashGetStatusReg2);
+    	CLI_Add_Command(&xFlashGetConfigReg);
+    	CLI_Add_Command(&xFlashGetSecData);
+    	CLI_Add_Command(&xFlashSetSecData);
+    }
 
     Print_About_Task_Handle = xTaskCreateStatic(Print_About_Task,
                                                 "Print_About_Task",
