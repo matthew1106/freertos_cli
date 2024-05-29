@@ -17,6 +17,7 @@
 #include "semphr.h"
 #include "task.h"
 #include "spi_flash.h"
+#include "cmsis_os.h"
 
 #define PRINT_ABOUT_TASK_STAK_SIZE 128u
 #define PRINT_ABOUT_TASK_PRIORITY 2u
@@ -148,6 +149,9 @@ static uint8_t Flash_SetSecData_Callback(uint8_t argc, const char *argv[],
                                          char *out_buffer, uint16_t out_maxn);
 
 
+static uint8_t Flash_EraseSecData_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn);
+
 static uint8_t Flash_GetStatusReg1_Callback(uint8_t argc, const char *argv[],
                                          char *out_buffer, uint16_t out_maxn);
 
@@ -276,6 +280,13 @@ CLI_Command_t xFlashSetSecData =
 		.CLI_Command = "flash_setSecData",
 		.CLI_Command_Description = "set flash Sec Data",
 		.CLI_Callback = Flash_SetSecData_Callback,
+};
+
+CLI_Command_t xFlashEraseSecData =
+{
+		.CLI_Command = "flash_eraseSecData",
+		.CLI_Command_Description = "erase flash Sec Data",
+		.CLI_Callback = Flash_EraseSecData_Callback,
 };
 
 
@@ -714,6 +725,7 @@ static uint8_t Flash_GetSecData_Callback(uint8_t argc, const char *argv[],
 {
 	int32_t len = 0;
 	int32_t sec_reg = 0;
+	int32_t i = 0;
 	Parse_Integer(argv[1], &sec_reg);
 	Parse_Integer(argv[2], &len);
 	if(sec_reg > 2 || sec_reg < 0)
@@ -730,6 +742,15 @@ static uint8_t Flash_GetSecData_Callback(uint8_t argc, const char *argv[],
 
 	sprintf(out_buffer, "spi flash read sec reg %ld, data len: %ld,  data: \r\n", sec_reg, len);
 
+	out_buffer += strlen(out_buffer);
+
+	for(i = 0; i<len; i++)
+	{
+		sprintf(out_buffer, "%02x", sec_data[i]);
+		out_buffer+=2;
+	}
+
+	sprintf(out_buffer, "\r\n");
 
 	return pdFALSE;
 }
@@ -738,10 +759,92 @@ static uint8_t Flash_GetSecData_Callback(uint8_t argc, const char *argv[],
 static uint8_t Flash_SetSecData_Callback(uint8_t argc, const char *argv[],
                                          char *out_buffer, uint16_t out_max)
 {
+	int32_t len = 0;
+	int32_t i = 0;
+	uint16_t num = 0;
+	int32_t sec_reg = 0;
+	uint8_t status_reg1 = 0;
+
+	Parse_Integer(argv[1], &sec_reg);
+
+	len = strlen(argv[2]);
+	if(len > 512)
+	{
+		len = 512;
+	}
+
+    for(i = 0; i < len; i++)
+    {
+    	if(argv[2][i] >= 'A' && argv[2][i] <= 'F')
+    	{
+    		num = argv[2][i] - 'A' + 10;
+    	}
+    	else if(argv[2][i] >= '0' && argv[2][i] <= '9')
+    	{
+    		num = argv[2][i] - '0';
+    	}
+    	else
+    	{
+    		sprintf(out_buffer, "Error: count %ld, char %c\r\n", i, argv[1][i]);
+    		return pdFALSE;
+    	}
+    	if((i % 2) == 0)
+    	{
+    		sec_data[i/2] = num * 16;
+    	}
+    	else
+    	{
+    		sec_data[i/2] += num;
+    	}
+
+    }
+    len = len / 2;
+
+    spi_flash_enable_write();
+
+    spi_flash_prog_security_reg(sec_reg, sec_data, len);
+
+    while(1)
+	{
+		spi_flash_read_status_reg1(&status_reg1);
+		if((status_reg1 & 0x01) != 0x01)
+		{
+			break;
+		}
+		osDelay(5);
+	}
+	sprintf(out_buffer, "spi flash write sec reg: %ld OK \r\n", sec_reg);
 
 	return pdFALSE;
 }
 
+static uint8_t Flash_EraseSecData_Callback(uint8_t argc, const char *argv[],
+                                         char *out_buffer, uint16_t out_maxn)
+{
+	int32_t sec_reg = 0;
+	uint8_t status_reg1 = 0;
+
+	Parse_Integer(argv[1], &sec_reg);
+	if(sec_reg > 2 || sec_reg < 0)
+	{
+		sec_reg = 0;
+	}
+	spi_flash_enable_write();
+	spi_flash_erase_security_reg(sec_reg);
+
+	while(1)
+	{
+		spi_flash_read_status_reg1(&status_reg1);
+		if((status_reg1 & 0x01) != 0x01)
+		{
+			break;
+		}
+		osDelay(5);
+	}
+	sprintf(out_buffer, "spi flash erase sec reg: %ld OK \r\n", sec_reg);
+
+	return pdFALSE;
+}
 
 static uint8_t Flash_GetStatusReg1_Callback(uint8_t argc, const char *argv[],
                                          char *out_buffer, uint16_t out_maxn)
@@ -817,6 +920,7 @@ void CLI_Add_All_Commands()
     	CLI_Add_Command(&xFlashGetConfigReg);
     	CLI_Add_Command(&xFlashGetSecData);
     	CLI_Add_Command(&xFlashSetSecData);
+    	CLI_Add_Command(&xFlashEraseSecData);
     }
 
     Print_About_Task_Handle = xTaskCreateStatic(Print_About_Task,
