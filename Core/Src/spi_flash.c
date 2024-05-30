@@ -221,6 +221,9 @@ uint8_t spi_flash_read_security_reg(uint8_t reg, uint8_t *data, uint32_t len)
 	txData = 0x00;
 	HAL_SPI_TransmitReceive(&hspi2, &txData, &rxData, 1, 1000);
 
+	//Add dummy byte
+	HAL_SPI_TransmitReceive(&hspi2, &txData, &rxData, 1, 1000);
+
 	for(i = 0; i<len; i++)
 	{
 		HAL_SPI_TransmitReceive(&hspi2, &txData, &data[i], 1, 1000);
